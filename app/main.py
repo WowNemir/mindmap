@@ -1,9 +1,9 @@
 import sys
 from itertools import cycle
-from collections import deque
+from collections import defaultdict, deque
 from PySide6 import QtCore, QtWidgets, QtGui
 import uuid
-from db import restore_all_nodes
+from db import load_all, save_all
 
 from functools import wraps
 
@@ -20,11 +20,10 @@ def mark_changed(method):
 class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
     touched = QtCore.Signal(object)
 
-    def __init__(self, text: str, width: int = 120, height: int = 50):
+    def __init__(self, text: str, id: str | None = None, width: int = 120, height: int = 50):
         QtCore.QObject.__init__(self)
         QtWidgets.QGraphicsRectItem.__init__(self, 0, 0, width, height)
-
-        self.id = uuid.uuid4()
+        self.id = id or uuid.uuid4()
 
         self.colors = [QtGui.QColor("orange"), QtGui.QColor("yellow")]
         self.colors_gen = cycle(self.colors)
@@ -72,10 +71,11 @@ class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
         super().focusOutEvent(event)
 
 class Link(QtWidgets.QGraphicsLineItem):
-    def __init__(self, source: Node, target: Node):
+    def __init__(self, source: Node, target: Node, id=None):
         super().__init__()
-        self.source = source
-        self.target = target
+        self.id = id or uuid.uuid4()
+        self.source: Node = source
+        self.target: Node = target
         pen = QtGui.QPen(QtCore.Qt.GlobalColor.black, 2)
         self.setPen(pen)
         self.update()
@@ -100,16 +100,37 @@ class MainWindow(QtWidgets.QWidget):
 
         self.buttons = [
             self.add_button('Add node', self.add_node, layout),
-            self.add_button("Link selected", self.link_selected_nodes, layout),
+            self.add_button("Link", self.link_selected_nodes, layout),
+            self.add_button("Save", self.save, layout)
         ]
         self.nodes: list[Node] = []
 
         self.two_n_one_l: dict[tuple[uuid.UUID, uuid.UUID], Link] = {}
-        self.node_links: dict[uuid.UUID, list[Link]] = {}
+        self.node_links: dict[uuid.UUID, list[Link]] = defaultdict(list)
 
         self.selected = deque(maxlen=2)
-        restore_all_nodes(self)
-    
+        self._restore()
+
+    def _restore(self):
+        nodes, links = load_all()
+        self.nodes = nodes
+        for node in nodes:
+            node.touched.connect(self._on_node_touched)
+
+            self.scene.addItem(node)
+        for link in links:
+            print(link)
+            t, s = link.target, link.source
+            key = tuple(sorted([s.id, t.id], key=str))
+            self.two_n_one_l[key] = link
+            self.node_links[t.id].append(link)
+            self.node_links[s.id].append(link)
+
+            self.scene.addItem(link)
+
+    def save(self):
+        save_all(self.nodes, list(self.two_n_one_l.values()))
+
     def add_button(self, name, func, layout):
         b = QtWidgets.QPushButton(name)
         b.clicked.connect(func)
@@ -134,6 +155,11 @@ class MainWindow(QtWidgets.QWidget):
         key = tuple(sorted([source.id, target.id], key=str))
 
         if key in self.two_n_one_l:
+            link = self.two_n_one_l.pop(key)
+            self.node_links.get(source.id, []).remove(link)
+            self.node_links.get(target.id, []).remove(link)
+            self.scene.removeItem(link)
+            del link
             return
 
         link = Link(source, target)
