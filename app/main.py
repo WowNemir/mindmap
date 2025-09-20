@@ -25,7 +25,6 @@ class RectWithText(QtCore.QObject, QtWidgets.QGraphicsRectItem):
         QtWidgets.QGraphicsRectItem.__init__(self, 0, 0, width, height)
 
         self.id = uuid.uuid4()
-        self.edges: list["Edge"] = []
 
         self.colors = [QtGui.QColor("orange"), QtGui.QColor("yellow")]
         self.colors_gen = cycle(self.colors)
@@ -61,8 +60,6 @@ class RectWithText(QtCore.QObject, QtWidgets.QGraphicsRectItem):
     def mouseMoveEvent(self, event):
         self._dragged = True
         super().mouseMoveEvent(event)
-        for edge in self.edges:
-            edge.update_position()
 
     @mark_changed
     def mouseReleaseEvent(self, event):
@@ -73,24 +70,6 @@ class RectWithText(QtCore.QObject, QtWidgets.QGraphicsRectItem):
     @mark_changed
     def focusOutEvent(self, event):
         super().focusOutEvent(event)
-
-
-class Edge(QtWidgets.QGraphicsLineItem):
-    def __init__(self, board,source: RectWithText, target: RectWithText):
-        super().__init__()
-        self.source = source
-        self.target = target
-        pen = QtGui.QPen(QtCore.Qt.GlobalColor.black, 2)
-        self.setPen(pen)
-        self.update_position()
-
-        source.edges.append(self)
-        target.edges.append(self)
-
-    def update_position(self):
-        p1 = self.source.sceneBoundingRect().center()
-        p2 = self.target.sceneBoundingRect().center()
-        self.setLine(QtCore.QLineF(p1, p2))
 
 
 class MainWindow(QtWidgets.QWidget):
@@ -105,12 +84,9 @@ class MainWindow(QtWidgets.QWidget):
 
         self.buttons = [
             self.add_button('Add node', self.add_node, layout),
-        self.add_button('Link last 2 nodes', self.link_last_two, layout),
-        self.add_button('Remove link last 2 nodes', self.remove_last_two_link, layout),
         ]
-
         self.nodes: list[RectWithText] = []
-        self.last_two = deque(maxlen=2)
+        self.selected = deque(maxlen=2)
         restore_all_nodes(self)
 
     def add_button(self, name, func, layout):
@@ -131,39 +107,19 @@ class MainWindow(QtWidgets.QWidget):
         return item
 
     def _mark_node(self, node: RectWithText):
-        if node in self.last_two:
-            self.last_two.remove(node)
-        self.last_two.append(node)
+        pen = QtGui.QPen(QtCore.Qt.GlobalColor.red)
+        pen.setWidth(2)
+        node.setPen(pen)
+        if node in self.selected:
+            self.selected.remove(node)
+        if self.selected.maxlen == len(self.selected):
+            removed = self.selected.popleft()
+            removed.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.black))
 
-    def link_2_nodes(self, node1, node2):
-        edge = Edge(self, node1, node2)
-        self.scene.addItem(edge)
-
-    def link_last_two(self) -> None:
-        if len(self.last_two) == 2:
-            self.link_2_nodes(self.last_two[0], self.last_two[1])
-
-    def remove_last_two_link(self) -> None:
-        if len(self.last_two) == 2:
-            self.get_and_remove_link_by_two_nodes(self.last_two[0], self.last_two[1])
-
-    def get_and_remove_link_by_two_nodes(self, source: RectWithText, target: RectWithText):
-        for edge in list(source.edges):
-            if (edge.source is source and edge.target is target) or (
-                edge.source is target and edge.target is source
-            ):
-                self.scene.removeItem(edge)
-                if edge in source.edges:
-                    source.edges.remove(edge)
-                if edge in target.edges:
-                    target.edges.remove(edge)
-                return edge
-        return None
-
+        self.selected.append(node)
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     widget = MainWindow()
-    widget.resize(800, 600)
     widget.show()
     sys.exit(app.exec())
