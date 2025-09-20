@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from main import RectWithText
+    from main import Node, Link
 
 
 conn = sqlite3.connect("my_database.db")
@@ -27,10 +27,11 @@ CREATE TABLE IF NOT EXISTS links (
 )
 """)
 
+def save(nodes: list["Node"], links: list["Link"]):pass
 def store_link(id1, id2):
     cursor.execute("insert into links (node1_id, node2_id) values (?, ?)", (id1, id2))
     conn.commit()
-def store_node(node: "RectWithText"):
+def store_node(node: "Node"):
     res = cursor.execute("INSERT INTO nodes (text, x, y, color) VALUES (?, ?, ?, ?) returning id", (node.label.toPlainText(), node.x(),  node.y(), str(node.brush().color().name())))
     id =    res.fetchone()[0]
     conn.commit()

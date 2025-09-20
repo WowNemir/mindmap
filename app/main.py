@@ -3,7 +3,7 @@ from itertools import cycle
 from collections import deque
 from PySide6 import QtCore, QtWidgets, QtGui
 import uuid
-from db import store_link, store_node, restore_all_nodes
+from db import restore_all_nodes
 
 from functools import wraps
 
@@ -17,7 +17,7 @@ def mark_changed(method):
     return wrapper
 
 
-class RectWithText(QtCore.QObject, QtWidgets.QGraphicsRectItem):
+class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
     touched = QtCore.Signal(object)
 
     def __init__(self, text: str, width: int = 120, height: int = 50):
@@ -71,6 +71,22 @@ class RectWithText(QtCore.QObject, QtWidgets.QGraphicsRectItem):
     def focusOutEvent(self, event):
         super().focusOutEvent(event)
 
+class Link(QtWidgets.QGraphicsLineItem):
+    def __init__(self, source: Node, target: Node):
+        super().__init__()
+        self.source = source
+        self.target = target
+        pen = QtGui.QPen(QtCore.Qt.GlobalColor.black, 2)
+        self.setPen(pen)
+        self.update()
+
+    def paint(self, painter, option, widget=None):
+        p1 = self.source.sceneBoundingRect().center()
+        p2 = self.target.sceneBoundingRect().center()
+        self.setLine(QtCore.QLineF(p1, p2))
+
+        super().paint(painter, option, widget)
+
 
 class MainWindow(QtWidgets.QWidget):
     def __init__(self) -> None:
@@ -84,32 +100,58 @@ class MainWindow(QtWidgets.QWidget):
 
         self.buttons = [
             self.add_button('Add node', self.add_node, layout),
+            self.add_button("Link selected", self.link_selected_nodes, layout),
         ]
-        self.nodes: list[RectWithText] = []
+        self.nodes: list[Node] = []
+
+        self.two_n_one_l: dict[tuple[uuid.UUID, uuid.UUID], Link] = {}
+        self.node_links: dict[uuid.UUID, list[Link]] = {}
+
         self.selected = deque(maxlen=2)
         restore_all_nodes(self)
-
+    
     def add_button(self, name, func, layout):
         b = QtWidgets.QPushButton(name)
         b.clicked.connect(func)
         layout.addWidget(b)
         return b
 
-
-    def add_node(self, x=100, y=100, text="node", color="green") -> RectWithText:
-        item = RectWithText(text)
-        item.touched.connect(self._mark_node)
+    def add_node(self, x=100, y=100, text="node", color="green") -> Node:
+        item = Node(text)
+        item.touched.connect(self._on_node_touched)
         self.scene.addItem(item)
-        item.setPos(x,y)
+        item.setPos(x, y)
         item.setBrush(QtGui.QColor(color))
         self.nodes.append(item)
-        self._mark_node(item)
+        self._select_node(item)
         return item
 
-    def _mark_node(self, node: RectWithText):
-        pen = QtGui.QPen(QtCore.Qt.GlobalColor.red)
-        pen.setWidth(2)
-        node.setPen(pen)
+    def link_selected_nodes(self):
+        if len(self.selected) < 2:
+            return
+
+        source, target = self.selected
+        key = tuple(sorted([source.id, target.id], key=str))
+
+        if key in self.two_n_one_l:
+            return
+
+        link = Link(source, target)
+        self.scene.addItem(link)
+
+        self.two_n_one_l[key] = link
+        self.node_links.setdefault(source.id, []).append(link)
+        self.node_links.setdefault(target.id, []).append(link)
+
+    def _on_node_touched(self, node: Node):
+        """Update node + its links when touched"""
+        self._select_node(node)
+        for link in self.node_links.get(node.id, []):
+            link.update()
+
+    def _select_node(self, node: Node):
+        node.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.red, 2))
+
         if node in self.selected:
             self.selected.remove(node)
         if self.selected.maxlen == len(self.selected):
