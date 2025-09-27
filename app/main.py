@@ -1,6 +1,7 @@
 import sys
 from itertools import cycle
 from collections import defaultdict, deque
+from typing import Callable, Concatenate, ParamSpec, TypeVar
 from PySide6 import QtCore, QtWidgets, QtGui
 import uuid
 from db import load_all, save_all
@@ -8,9 +9,12 @@ from db import load_all, save_all
 from functools import wraps
 
 
-def mark_changed(method):
+P = ParamSpec("P")
+R = TypeVar("R")
+
+def mark_changed(method: Callable[Concatenate["Node", P], R]) -> Callable[Concatenate["Node", P], R]:
     @wraps(method)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: "Node", *args: P.args, **kwargs: P.kwargs) -> R:
         result = method(self, *args, **kwargs)
         self.touched.emit(self)
         return result
@@ -23,7 +27,7 @@ class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
     def __init__(self, text: str, id: str | None = None, width: int = 120, height: int = 50):
         QtCore.QObject.__init__(self)
         QtWidgets.QGraphicsRectItem.__init__(self, 0, 0, width, height)
-        self.id = id or uuid.uuid4()
+        self.id: str = id or str(uuid.uuid4())
 
         self.colors = [QtGui.QColor("orange"), QtGui.QColor("yellow")]
         self.colors_gen = cycle(self.colors)
@@ -68,12 +72,14 @@ class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
 
     @mark_changed
     def focusOutEvent(self, event):
+        self.label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextEditable)
         super().focusOutEvent(event)
+
 
 class Link(QtWidgets.QGraphicsLineItem):
     def __init__(self, source: Node, target: Node, id=None):
         super().__init__()
-        self.id = id or uuid.uuid4()
+        self.id: str = id or str(uuid.uuid4())
         self.source: Node = source
         self.target: Node = target
         pen = QtGui.QPen(QtCore.Qt.GlobalColor.black, 2)
@@ -94,7 +100,7 @@ class MainWindow(QtWidgets.QWidget):
 
         self.scene = QtWidgets.QGraphicsScene()
         self.view = QtWidgets.QGraphicsView(self.scene) 
-
+        self.view.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.view)
 
@@ -105,10 +111,10 @@ class MainWindow(QtWidgets.QWidget):
         ]
         self.nodes: list[Node] = []
 
-        self.two_n_one_l: dict[tuple[uuid.UUID, uuid.UUID], Link] = {}
-        self.node_links: dict[uuid.UUID, list[Link]] = defaultdict(list)
+        self.pair_nodes_link: dict[tuple[str, str], Link] = {}
+        self.node_links: dict[str, list[Link]] = defaultdict(list)
 
-        self.selected = deque(maxlen=2)
+        self.selected: deque[Node] = deque(maxlen=2)
         self._restore()
 
     def _restore(self):
@@ -119,17 +125,19 @@ class MainWindow(QtWidgets.QWidget):
 
             self.scene.addItem(node)
         for link in links:
-            print(link)
-            t, s = link.target, link.source
-            key = tuple(sorted([s.id, t.id], key=str))
-            self.two_n_one_l[key] = link
-            self.node_links[t.id].append(link)
-            self.node_links[s.id].append(link)
+            target, source = link.target, link.source
+            if source.id > target.id:
+                source, target = target, source
+            key = (target.id, source.id)
+
+            self.pair_nodes_link[key] = link
+            self.node_links[target.id].append(link)
+            self.node_links[source.id].append(link)
 
             self.scene.addItem(link)
 
     def save(self):
-        save_all(self.nodes, list(self.two_n_one_l.values()))
+        save_all(self.nodes, list(self.pair_nodes_link.values()))
 
     def add_button(self, name, func, layout):
         b = QtWidgets.QPushButton(name)
@@ -152,10 +160,12 @@ class MainWindow(QtWidgets.QWidget):
             return
 
         source, target = self.selected
-        key = tuple(sorted([source.id, target.id], key=str))
+        if source.id > target.id:
+            source, target = target, source
+        key = (target.id, source.id)
 
-        if key in self.two_n_one_l:
-            link = self.two_n_one_l.pop(key)
+        if key in self.pair_nodes_link:
+            link = self.pair_nodes_link.pop(key)
             self.node_links.get(source.id, []).remove(link)
             self.node_links.get(target.id, []).remove(link)
             self.scene.removeItem(link)
@@ -165,17 +175,17 @@ class MainWindow(QtWidgets.QWidget):
         link = Link(source, target)
         self.scene.addItem(link)
 
-        self.two_n_one_l[key] = link
+        self.pair_nodes_link[key] = link
         self.node_links.setdefault(source.id, []).append(link)
         self.node_links.setdefault(target.id, []).append(link)
 
-    def _on_node_touched(self, node: Node):
+    def _on_node_touched(self, node: Node) -> None:
         """Update node + its links when touched"""
         self._select_node(node)
         for link in self.node_links.get(node.id, []):
             link.update()
 
-    def _select_node(self, node: Node):
+    def _select_node(self, node: Node) -> None:
         node.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.red, 2))
 
         if node in self.selected:
@@ -190,4 +200,5 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     widget = MainWindow()
     widget.show()
+    widget.showFullScreen()
     sys.exit(app.exec())
