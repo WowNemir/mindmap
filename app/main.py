@@ -5,7 +5,6 @@ from typing import Callable, Concatenate, ParamSpec, TypeVar
 from PySide6 import QtCore, QtWidgets, QtGui
 import uuid
 from db import load_all, save_all
-
 from functools import wraps
 
 
@@ -100,9 +99,13 @@ class MainWindow(QtWidgets.QWidget):
 
         self.scene = QtWidgets.QGraphicsScene()
         self.view = QtWidgets.QGraphicsView(self.scene) 
-        self.view.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.view)
+
+        shortcut_z_out = QtGui.QShortcut(QtGui.QKeySequence('Ctrl+-'), self)
+        shortcut_z_out.activated.connect(self.zoom_out)
+        shortcut_z_in = QtGui.QShortcut(QtGui.QKeySequence('Ctrl+='), self)
+        shortcut_z_in.activated.connect(self.zoom_in)
 
         self.buttons = [
             self.add_button('Add node', self.add_node, layout),
@@ -180,7 +183,6 @@ class MainWindow(QtWidgets.QWidget):
         self.node_links.setdefault(target.id, []).append(link)
 
     def _on_node_touched(self, node: Node) -> None:
-        """Update node + its links when touched"""
         self._select_node(node)
         for link in self.node_links.get(node.id, []):
             link.update()
@@ -195,6 +197,12 @@ class MainWindow(QtWidgets.QWidget):
             removed.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.black))
 
         self.selected.append(node)
+
+    def zoom_in(self):
+        self.view.scale(1.2, 1.2)
+
+    def zoom_out(self):
+        self.view.scale(1/1.2, 1/1.2)
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
