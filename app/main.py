@@ -11,6 +11,7 @@ from functools import wraps
 P = ParamSpec("P")
 R = TypeVar("R")
 
+
 def mark_changed(method: Callable[Concatenate["Node", P], R]) -> Callable[Concatenate["Node", P], R]:
     @wraps(method)
     def wrapper(self: "Node", *args: P.args, **kwargs: P.kwargs) -> R:
@@ -18,6 +19,7 @@ def mark_changed(method: Callable[Concatenate["Node", P], R]) -> Callable[Concat
         self.touched.emit(self)
         return result
     return wrapper
+
 
 
 class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
@@ -51,7 +53,6 @@ class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
             rect_bounds.center().x() - text_bounds.width() / 2,
             rect_bounds.center().y() - text_bounds.height() / 2,
         )
-
 
     @mark_changed
     def mousePressEvent(self, event):
@@ -93,6 +94,73 @@ class Link(QtWidgets.QGraphicsLineItem):
         super().paint(painter, option, widget)
 
 
+class Region(QtWidgets.QGraphicsRectItem):
+    def __init__(self, name: str = "Region", width: int = 300, height: int = 200):
+        super().__init__(0, 0, width, height)
+        self.setFlags(
+            QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsMovable |
+            QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
+        )
+        self.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.blue, 2, QtCore.Qt.PenStyle.DashLine))
+        self.setBrush(QtGui.QBrush(QtGui.QColor(200, 200, 255, 50)))
+
+        # Make region appear behind everything
+        self.setZValue(-1)
+
+        # Label
+        self.label = QtWidgets.QGraphicsTextItem(name, self)
+        self.label.setDefaultTextColor(QtGui.QColor("blue"))
+        self.label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextEditable)
+        self.update_label_position()
+
+        self.nodes: list[Node] = []
+
+        # Resizing
+        self.setAcceptHoverEvents(True)
+        self._resizing = False
+        self._resize_handle_size = 12
+        self._min_size = QtCore.QSizeF(80, 60)
+
+    def update_label_position(self):
+        self.label.setPos(self.rect().x() + 5, self.rect().y() + 5)
+
+    def mousePressEvent(self, event):
+        if self.cursor().shape() == QtCore.Qt.CursorShape.SizeFDiagCursor:
+            self._resizing = True
+            self._resize_start_rect = self.rect()
+            self._resize_start_pos = event.scenePos()
+        else:
+            self._resizing = False
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._resizing:
+            delta = event.scenePos() - self._resize_start_pos
+            factor = 0.5
+            new_width = max(self._min_size.width(), self._resize_start_rect.width() + delta.x() * factor)
+            new_height = max(self._min_size.height(), self._resize_start_rect.height() + delta.y() * factor)
+            self.setRect(0, 0, new_width, new_height)
+            self.update_label_position()
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._resizing = False
+        super().mouseReleaseEvent(event)
+
+    def hoverMoveEvent(self, event):
+        rect = self.rect()
+        if abs(event.pos().x() - rect.width()) < self._resize_handle_size and \
+           abs(event.pos().y() - rect.height()) < self._resize_handle_size:
+            self.setCursor(QtCore.Qt.CursorShape.SizeFDiagCursor)
+        else:
+            self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
+        super().hoverMoveEvent(event)
+
+    def add_node(self, node: Node):
+        if node not in self.nodes:
+            self.nodes.append(node)
+
 class MainWindow(QtWidgets.QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -110,7 +178,8 @@ class MainWindow(QtWidgets.QWidget):
         self.buttons = [
             self.add_button('Add node', self.add_node, layout),
             self.add_button("Link", self.link_selected_nodes, layout),
-            self.add_button("Save", self.save, layout)
+            self.add_button("Save", self.save, layout),
+            self.add_button("Add Region", self.add_region, layout),
         ]
         self.nodes: list[Node] = []
 
@@ -181,6 +250,11 @@ class MainWindow(QtWidgets.QWidget):
         self.pair_nodes_link[key] = link
         self.node_links.setdefault(source.id, []).append(link)
         self.node_links.setdefault(target.id, []).append(link)
+
+    def add_region(self):
+        region = Region()
+        self.scene.addItem(region)
+        region.setPos(150, 150)
 
     def _on_node_touched(self, node: Node) -> None:
         self._select_node(node)
