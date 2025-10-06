@@ -4,13 +4,24 @@ from typing import TYPE_CHECKING
 
 from PySide6 import QtGui
 
+
 if TYPE_CHECKING:
     from main import Node, Link, Region
 
 
 conn = sqlite3.connect("my_database.db")
 cursor = conn.cursor()
-
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS regions (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    x INTEGER,
+    y INTEGER,
+    width INTEGER,
+    height INTEGER,
+    color TEXT
+)
+""")
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS nodes (
     id TEXT PRIMARY KEY,
@@ -32,7 +43,7 @@ CREATE TABLE IF NOT EXISTS links (
 def save_all(
     nodes: list["Node"],
     links: list["Link"],
-    # regions: list["Region"]
+    regions: list["Region"]
 ):
     for node in nodes:
         cursor.execute(
@@ -53,7 +64,29 @@ def save_all(
                 node.brush().color().name(),
             ),
         )
-
+    for region in regions:
+        cursor.execute(
+            """
+            INSERT INTO regions (id, name, x, y, width, height, color)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                x = excluded.x,
+                y = excluded.y,
+                width = excluded.width,
+                height = excluded.height,
+                color = excluded.color
+        """,
+            (
+                str(region.id),
+                region.label.toPlainText(),
+                region.scenePos().x(),
+                region.scenePos().y(),
+                region.rect().width(),
+                region.rect().height(),
+                region.brush().color().name(),
+            ),
+        )
     for link in links:
         cursor.execute(
             """
@@ -71,12 +104,13 @@ def save_all(
 def load_all() -> tuple[
     list["Node"],
     list["Link"],
-    # list["Region"]
+    list["Region"],
 ]:
-    from main import Node, Link
+    from main import Node, Link, Region
 
     nodes_db = cursor.execute("select * from nodes").fetchall()
     links_db = cursor.execute("select * from links").fetchall()
+    regions_db = cursor.execute("select * from regions").fetchall()
 
     nodes = []
     nodes_dict = {}
@@ -96,5 +130,10 @@ def load_all() -> tuple[
         l = Link(n1, n2, id=id_)
         links.append(l)
 
-    #   for
-    return nodes, links
+    regions = []
+    for id_, name, x, y, width, height, color in regions_db:
+        r = Region(id=id_, name=name, width=width, height=height)
+        r.setPos(x, y)
+        regions.append(r)
+    return nodes, links, regions
+
