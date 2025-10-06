@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from PySide6 import QtGui
 
 if TYPE_CHECKING:
-
     from main import Node, Link, Region
 
 
@@ -30,12 +29,14 @@ CREATE TABLE IF NOT EXISTS links (
 """)
 
 
-def save_all(nodes: list["Node"], links: list["Link"],
-             #regions: list["Region"]
-             ):
-
+def save_all(
+    nodes: list["Node"],
+    links: list["Link"],
+    # regions: list["Region"]
+):
     for node in nodes:
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO nodes (id, text, x, y, color)
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
@@ -43,37 +44,39 @@ def save_all(nodes: list["Node"], links: list["Link"],
                 x = excluded.x,
                 y = excluded.y,
                 color = excluded.color
-        """, (
-            str(node.id),
-            node.label.toPlainText(),
-            node.scenePos().x(),
-            node.scenePos().y(),
-            node.brush().color().name()
-        ))
+        """,
+            (
+                str(node.id),
+                node.label.toPlainText(),
+                node.scenePos().x(),
+                node.scenePos().y(),
+                node.brush().color().name(),
+            ),
+        )
 
     for link in links:
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO links (id, node1_id, node2_id)
             VALUES (?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 node1_id = excluded.node1_id,
                 node2_id = excluded.node2_id
-        """, (
-            str(link.id),
-            link.source.id,
-            link.target.id
-        ))
+        """,
+            (str(link.id), link.source.id, link.target.id),
+        )
     conn.commit()
 
 
-def load_all() -> tuple[list["Node"], list["Link"],
-    #list["Region"]
+def load_all() -> tuple[
+    list["Node"],
+    list["Link"],
+    # list["Region"]
 ]:
-
     from main import Node, Link
+
     nodes_db = cursor.execute("select * from nodes").fetchall()
     links_db = cursor.execute("select * from links").fetchall()
-
 
     nodes = []
     nodes_dict = {}
@@ -93,6 +96,5 @@ def load_all() -> tuple[list["Node"], list["Link"],
         l = Link(n1, n2, id=id_)
         links.append(l)
 
-     #   for 
+    #   for
     return nodes, links
-
