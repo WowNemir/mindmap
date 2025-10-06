@@ -6,7 +6,7 @@ from PySide6 import QtGui
 
 if TYPE_CHECKING:
 
-    from main import Node, Link
+    from main import Node, Link, Region
 
 
 conn = sqlite3.connect("my_database.db")
@@ -14,7 +14,7 @@ cursor = conn.cursor()
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS nodes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     text TEXT NOT NULL,
     x INTEGER,
     y INTEGER,
@@ -23,32 +23,20 @@ CREATE TABLE IF NOT EXISTS nodes (
 """)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS links (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     node1_id INTEGER,
     node2_id INTEGER
 )
 """)
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS nodes2 (
-    id TEXT PRIMARY KEY,
-    text TEXT NOT NULL,
-    x INTEGER,
-    y INTEGER,
-    color TEXT
-)
-""")
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS links2 (
-    id TEXT PRIMARY KEY,
-    node1_id INTEGER,
-    node2_id INTEGER
-)
-""")
-def save_all(nodes: list["Node"], links: list["Link"]):
+
+def save_all(nodes: list["Node"], links: list["Link"],
+             #regions: list["Region"]
+             ):
+
     for node in nodes:
         cursor.execute("""
-            INSERT INTO nodes2 (id, text, x, y, color)
+            INSERT INTO nodes (id, text, x, y, color)
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 text = excluded.text,
@@ -65,7 +53,7 @@ def save_all(nodes: list["Node"], links: list["Link"]):
 
     for link in links:
         cursor.execute("""
-            INSERT INTO links2 (id, node1_id, node2_id)
+            INSERT INTO links (id, node1_id, node2_id)
             VALUES (?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 node1_id = excluded.node1_id,
@@ -78,11 +66,15 @@ def save_all(nodes: list["Node"], links: list["Link"]):
     conn.commit()
 
 
-def load_all() -> tuple[list["Node"], list["Link"]]:
+def load_all() -> tuple[list["Node"], list["Link"],
+    #list["Region"]
+]:
 
     from main import Node, Link
-    nodes_db = cursor.execute("select * from nodes2").fetchall()
-    links_db = cursor.execute("select * from links2").fetchall()
+    nodes_db = cursor.execute("select * from nodes").fetchall()
+    links_db = cursor.execute("select * from links").fetchall()
+
+
     nodes = []
     nodes_dict = {}
     for id_, text, x, y, color in nodes_db:
@@ -101,5 +93,6 @@ def load_all() -> tuple[list["Node"], list["Link"]]:
         l = Link(n1, n2, id=id_)
         links.append(l)
 
+     #   for 
     return nodes, links
 
