@@ -12,19 +12,24 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def mark_changed(method: Callable[Concatenate["Node", P], R]) -> Callable[Concatenate["Node", P], R]:
+def mark_changed(
+    method: Callable[Concatenate["Node", P], R],
+) -> Callable[Concatenate["Node", P], R]:
     @wraps(method)
     def wrapper(self: "Node", *args: P.args, **kwargs: P.kwargs) -> R:
         result = method(self, *args, **kwargs)
         self.touched.emit(self)
         return result
+
     return wrapper
 
 
 class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
     touched = QtCore.Signal(object)
 
-    def __init__(self, text: str, id: str | None = None, width: int = 120, height: int = 50):
+    def __init__(
+        self, text: str, id: str | None = None, width: int = 120, height: int = 50
+    ):
         QtCore.QObject.__init__(self)
         QtWidgets.QGraphicsRectItem.__init__(self, 0, 0, width, height)
         self.id: str = id or str(uuid.uuid4())
@@ -94,14 +99,18 @@ class Link(QtWidgets.QGraphicsLineItem):
 
 
 class Region(QtWidgets.QGraphicsRectItem):
-    def __init__(self, name: str = "Region", id = None, width: int = 300, height: int = 200):
+    def __init__(
+        self, name: str = "Region", id=None, width: int = 300, height: int = 200
+    ):
         super().__init__(0, 0, width, height)
         self.id: str = id or str(uuid.uuid4())
         self.setFlags(
-            QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsMovable |
-            QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
+            QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsMovable
+            | QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
         )
-        self.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.blue, 2, QtCore.Qt.PenStyle.DashLine))
+        self.setPen(
+            QtGui.QPen(QtCore.Qt.GlobalColor.blue, 2, QtCore.Qt.PenStyle.DashLine)
+        )
         self.setBrush(QtGui.QBrush(QtGui.QColor(200, 200, 255, 50)))
 
         self.setZValue(-1)
@@ -132,8 +141,14 @@ class Region(QtWidgets.QGraphicsRectItem):
         if self._resizing:
             delta = event.scenePos() - self._resize_start_pos
             factor = 0.5
-            new_width = max(self._min_size.width(), self._resize_start_rect.width() + delta.x() * factor)
-            new_height = max(self._min_size.height(), self._resize_start_rect.height() + delta.y() * factor)
+            new_width = max(
+                self._min_size.width(),
+                self._resize_start_rect.width() + delta.x() * factor,
+            )
+            new_height = max(
+                self._min_size.height(),
+                self._resize_start_rect.height() + delta.y() * factor,
+            )
             self.setRect(0, 0, new_width, new_height)
             self.update_label_position()
         else:
@@ -145,30 +160,36 @@ class Region(QtWidgets.QGraphicsRectItem):
 
     def hoverMoveEvent(self, event):
         rect = self.rect()
-        if abs(event.pos().x() - rect.width()) < self._resize_handle_size and \
-           abs(event.pos().y() - rect.height()) < self._resize_handle_size:
+        if (
+            abs(event.pos().x() - rect.width()) < self._resize_handle_size
+            and abs(event.pos().y() - rect.height()) < self._resize_handle_size
+        ):
             self.setCursor(QtCore.Qt.CursorShape.SizeFDiagCursor)
         else:
             self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
         super().hoverMoveEvent(event)
 
 
+class Scene(QtWidgets.QGraphicsScene):
+    pass
+
+
 class MainWindow(QtWidgets.QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-        self.scene = QtWidgets.QGraphicsScene()
-        self.view = QtWidgets.QGraphicsView(self.scene) 
+        self.scene = Scene()
+        self.view = QtWidgets.QGraphicsView(self.scene)
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.view)
 
-        shortcut_z_out = QtGui.QShortcut(QtGui.QKeySequence('Ctrl+-'), self)
+        shortcut_z_out = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+-"), self)
         shortcut_z_out.activated.connect(self.zoom_out)
-        shortcut_z_in = QtGui.QShortcut(QtGui.QKeySequence('Ctrl+='), self)
+        shortcut_z_in = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+="), self)
         shortcut_z_in.activated.connect(self.zoom_in)
 
         self.buttons = [
-            self.add_button('Add node', self.add_node, layout),
+            self.add_button("Add node", self.add_node, layout),
             self.add_button("Link", self.link_selected_nodes, layout),
             self.add_button("Save", self.save, layout),
             self.add_button("Add Region", self.add_region, layout),
@@ -182,6 +203,9 @@ class MainWindow(QtWidgets.QWidget):
 
         self.selected: deque[Node] = deque(maxlen=2)
         self._restore()
+
+    def mouseDoubleClickEvent(self, e):
+        self.add_node(e.screenPos().x(), e.screenPos().y())
 
     def _restore(self):
         nodes, links, regions = load_all()
@@ -198,9 +222,7 @@ class MainWindow(QtWidgets.QWidget):
             target, source = link.target, link.source
             if source.id > target.id:
                 source, target = target, source
-            key = (target.id, source.id)
-
-            self.pair_nodes_link[key] = link
+            self.pair_nodes_link[(target.id, source.id)] = link
             self.node_links[target.id].append(link)
             self.node_links[source.id].append(link)
 
@@ -218,15 +240,16 @@ class MainWindow(QtWidgets.QWidget):
     def add_node(self, x=100, y=100, text="node", color="green") -> Node:
         item = Node(text)
         item.touched.connect(self._on_node_touched)
+        new_pos = self.view.mapToScene(x, y)
+
         self.scene.addItem(item)
-        item.setPos(x, y)
+        item.setPos(new_pos)
         item.setBrush(QtGui.QColor(color))
         self.nodes.append(item)
         self._select_node(item)
         return item
 
     def add_region(self, x=100, y=100, text="region") -> Region:
- 
         region = Region(text)
         region.setPos(x, y)
         self.scene.addItem(region)
@@ -255,8 +278,8 @@ class MainWindow(QtWidgets.QWidget):
         self.scene.addItem(link)
 
         self.pair_nodes_link[key] = link
-        self.node_links.setdefault(source.id, []).append(link)
-        self.node_links.setdefault(target.id, []).append(link)
+        self.node_links[source.id].append(link)
+        self.node_links[target.id].append(link)
 
     def _on_node_touched(self, node: Node) -> None:
         self._select_node(node)
@@ -278,11 +301,11 @@ class MainWindow(QtWidgets.QWidget):
         self.view.scale(1.2, 1.2)
 
     def zoom_out(self):
-        self.view.scale(1/1.2, 1/1.2)
+        self.view.scale(1 / 1.2, 1 / 1.2)
+
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     widget = MainWindow()
-    widget.show()
     widget.showFullScreen()
     sys.exit(app.exec())
