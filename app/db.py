@@ -1,5 +1,4 @@
 import sqlite3
-from typing import Text
 from typing import TYPE_CHECKING
 
 from PySide6 import QtGui
@@ -9,7 +8,7 @@ if TYPE_CHECKING:
     from main import Node, Link, Region
 
 
-conn = sqlite3.connect("my_database.db")
+conn = sqlite3.connect("/home/sasha/Desktop/hobby/mindmap/my_database.db")
 cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS regions (
@@ -40,11 +39,7 @@ CREATE TABLE IF NOT EXISTS links (
 """)
 
 
-def save_all(
-    nodes: list["Node"],
-    links: list["Link"],
-    regions: list["Region"]
-):
+def save_all(nodes: list["Node"], links: list["Link"], regions: list["Region"]):
     for node in nodes:
         cursor.execute(
             """
@@ -127,8 +122,8 @@ def load_all() -> tuple[
         n2 = nodes_dict.get(str(n2_id))
         if not n1 or not n2:
             continue
-        l = Link(n1, n2, id=id_)
-        links.append(l)
+        link = Link(n1, n2, id=id_)
+        links.append(link)
 
     regions = []
     for id_, name, x, y, width, height, color in regions_db:
@@ -136,4 +131,3 @@ def load_all() -> tuple[
         r.setPos(x, y)
         regions.append(r)
     return nodes, links, regions
-
