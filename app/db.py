@@ -110,6 +110,8 @@ def load_all() -> tuple[
     nodes = []
     nodes_dict = {}
     for id_, text, x, y, color in nodes_db:
+        x = x or 0
+        y = y or 0
         n = Node(id=id_, text=text)
         n.setPos(x, y)
         n.setBrush(QtGui.QColor(color))

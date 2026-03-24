@@ -50,6 +50,8 @@ class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
 
         self._dragged = False
 
+        self.setZValue(10)
+
     def update_text_position(self):
         rect_bounds = self.rect()
         text_bounds = self.label.boundingRect()
@@ -80,6 +82,22 @@ class Node(QtCore.QObject, QtWidgets.QGraphicsRectItem):
         super().focusOutEvent(event)
 
 
+def rect_edge_point(rect: QtCore.QRectF, line: QtCore.QLineF) -> QtCore.QPointF:
+    edges = (
+        QtCore.QLineF(rect.topLeft(), rect.topRight()),
+        QtCore.QLineF(rect.topRight(), rect.bottomRight()),
+        QtCore.QLineF(rect.bottomRight(), rect.bottomLeft()),
+        QtCore.QLineF(rect.bottomLeft(), rect.topLeft()),
+    )
+
+    for edge in edges:
+        intersection_type, point = line.intersects(edge)
+        if intersection_type == QtCore.QLineF.IntersectionType.BoundedIntersection:
+            return point
+
+    return rect.center()
+
+
 class Link(QtWidgets.QGraphicsLineItem):
     def __init__(self, source: Node, target: Node, id=None):
         super().__init__()
@@ -90,11 +108,21 @@ class Link(QtWidgets.QGraphicsLineItem):
         self.setPen(pen)
         self.update()
 
-    def paint(self, painter, option, widget=None):
-        p1 = self.source.sceneBoundingRect().center()
-        p2 = self.target.sceneBoundingRect().center()
-        self.setLine(QtCore.QLineF(p1, p2))
+        self.setZValue(0)
 
+    def paint(self, painter, option, widget=None):
+        src_rect = self.source.sceneBoundingRect()
+        tgt_rect = self.target.sceneBoundingRect()
+
+        src_center = src_rect.center()
+        tgt_center = tgt_rect.center()
+
+        center_line = QtCore.QLineF(src_center, tgt_center)
+
+        p1 = rect_edge_point(src_rect, center_line)
+        p2 = rect_edge_point(tgt_rect, QtCore.QLineF(tgt_center, src_center))
+
+        self.setLine(QtCore.QLineF(p1, p2))
         super().paint(painter, option, widget)
 
 
