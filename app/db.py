@@ -3,12 +3,11 @@ from typing import TYPE_CHECKING
 
 from PySide6 import QtGui
 
-
 if TYPE_CHECKING:
-    from main import Node, Link, Region
+    from main import Link, Node, Region
 
 
-conn = sqlite3.connect("/home/sasha/Desktop/hobby/mindmap/my_database.db")
+conn = sqlite3.connect("/home/sasha/Desktop/hobby/mindmap/app/my_database.db")
 cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS regions (
@@ -96,12 +95,14 @@ def save_all(nodes: list["Node"], links: list["Link"], regions: list["Region"]):
     conn.commit()
 
 
-def load_all() -> tuple[
-    list["Node"],
-    list["Link"],
-    list["Region"],
-]:
-    from main import Node, Link, Region
+def load_all() -> (
+    tuple[
+        list["Node"],
+        list["Link"],
+        list["Region"],
+    ]
+):
+    from main import Link, Node, Region
 
     nodes_db = cursor.execute("select * from nodes").fetchall()
     links_db = cursor.execute("select * from links").fetchall()
@@ -128,7 +129,7 @@ def load_all() -> tuple[
         links.append(link)
 
     regions = []
-    for id_, name, x, y, width, height, color in regions_db:
+    for id_, name, x, y, width, height, _ in regions_db:
         r = Region(id=id_, name=name, width=width, height=height)
         r.setPos(x, y)
         regions.append(r)
