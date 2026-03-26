@@ -1,6 +1,8 @@
-from typing import AsyncGenerator
 import uuid
-from fastapi import Depends, FastAPI, APIRouter
+from collections.abc import AsyncGenerator
+
+from backend.models import NoteModel, RegionModel
+from fastapi import APIRouter, Depends, FastAPI
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
@@ -9,14 +11,12 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from app.backend.models import NoteModel
-
 
 engine: AsyncEngine = create_async_engine("sqlite+aiosqlite:///my_database.db")
 session_maker = async_sessionmaker(bind=engine, expire_on_commit=False)
 
 
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_async_session() -> AsyncGenerator[AsyncSession]:
     async with session_maker() as session:
         yield session
 
@@ -43,6 +43,12 @@ async def create_note(req: Note, db_session: AsyncSession = Depends(get_async_se
 async def get_notes(db_session: AsyncSession = Depends(get_async_session)):
     notes = list(await db_session.scalars(select(NoteModel)))
     return notes
+
+
+@router.get("/regions")
+async def get_regions(db_session: AsyncSession = Depends(get_async_session)):
+    regions = list(await db_session.scalars(select(RegionModel)))
+    return regions
 
 
 app.include_router(router)
